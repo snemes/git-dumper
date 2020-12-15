@@ -18,6 +18,11 @@ import dulwich.pack
 import requests
 import socks
 
+# disable the annoying insecure request warnings
+from urllib3 import disable_warnings
+from urllib3.exceptions import InsecureRequestWarning
+disable_warnings(InsecureRequestWarning)
+
 
 def printf(fmt, *args, file=sys.stdout):
     if args:
@@ -173,13 +178,15 @@ class DownloadWorker(Worker):
     def init(self, url, directory, retry, timeout):
         self.session = requests.Session()
         self.session.verify = False
+        self.session.proxies = {'http': 'socks5h://127.0.0.1:9050', 'https': 'socks5h://127.0.0.1:9050'}
+        self.session.headers = {}
         self.session.mount(url, requests.adapters.HTTPAdapter(max_retries=retry))
 
     def do_task(self, filepath, url, directory, retry, timeout):
         if os.path.isfile(os.path.join(directory, filepath)):
             printf('[-] Already downloaded %s/%s\n', url, filepath)
             return []
-        
+
         with closing(self.session.get('%s/%s' % (url, filepath),
                                       allow_redirects=False,
                                       stream=True,
@@ -207,7 +214,7 @@ class RecursiveDownloadWorker(DownloadWorker):
         if os.path.isfile(os.path.join(directory, filepath)):
             printf('[-] Already downloaded %s/%s\n', url, filepath)
             return []
-        
+
         with closing(self.session.get('%s/%s' % (url, filepath),
                                       allow_redirects=False,
                                       stream=True,
@@ -274,7 +281,7 @@ class FindObjectsWorker(DownloadWorker):
 
     def do_task(self, obj, url, directory, retry, timeout):
         filepath = '.git/objects/%s/%s' % (obj[:2], obj[2:])
-        
+
         if os.path.isfile(os.path.join(directory, filepath)):
             printf('[-] Already downloaded %s/%s\n', url, filepath)
         else:
